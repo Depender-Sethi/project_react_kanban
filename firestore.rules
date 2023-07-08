@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // FUNCTIONS //
+
+    function isOwner(userId) {
+      return  request.auth != null && request.auth.uid == userId
+    }
+
+    function docOnlyHasRequiredFields(requiredFields) {
+      let incomingData = request.resource.data;
+      return incomingData.keys().hasAll(requiredFields) && incomingData.keys().hasOnly(requiredFields);
+    }
+
+    ////
+
+
+    match /users/{userId}/boards/{boardId} {
+
+      function verifyDocFields() {
+        let incomingData = request.resource.data;
+        return incomingData.name is string && incomingData.name.matches('^[a-zA-Z0-9 \t]{1,20}$')
+          && incomingData.color is number && incomingData.color >= 0 &&  incomingData.color <= 5 
+          && incomingData.createdAt is timestamp && incomingData.createdAt == request.time;
+      }
+
+      allow read: if isOwner(userId);
+      allow delete: if isOwner(userId);
+      allow create: if isOwner(userId) && docOnlyHasRequiredFields(['color', 'createdAt', 'name'])  && verifyDocFields();
+    }
+
+
+    match /users/{userId}/boardsData/{boardId} {
+
+      function verifyDocFields() {
+        let incomingData = request.resource.data;
+        return incomingData.tabs is map 
+          && incomingData.tabs.keys().hasAll(['todos', 'inProgress', 'completed'])
+          && incomingData.tabs.keys().hasOnly(['todos', 'inProgress', 'completed'])
+          && incomingData.lastUpdated is timestamp && incomingData.lastUpdated == request.time
+      }
+
+      allow get: if isOwner(userId)
+      allow update: if isOwner(userId) && docOnlyHasRequiredFields(['tabs', 'lastUpdated']) && verifyDocFields()
+    }
+
+  }
+
+
+
+}
